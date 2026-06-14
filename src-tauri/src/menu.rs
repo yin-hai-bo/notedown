@@ -1,10 +1,15 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use serde::Serialize;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
-    AppHandle, Emitter, Runtime,
+    AppHandle, Emitter, Event, Listener, Manager, Runtime,
 };
 
-use crate::settings::{self, ThemePreference};
+use crate::{
+    app_event::AppEvent,
+    settings::{self, ThemePreference},
+};
 
 pub const MENU_ACTION_EVENT: &str = "menu-action";
 
@@ -17,6 +22,8 @@ const MENU_QUIT: &str = "file.quit";
 const MENU_THEME_SYSTEM: &str = "theme.system";
 const MENU_THEME_LIGHT: &str = "theme.light";
 const MENU_THEME_DARK: &str = "theme.dark";
+
+static APP_EVENT_LISTENER_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
 pub struct AppMenu;
@@ -37,6 +44,26 @@ fn menu_text<'a>(plain_text: &'a str, _mnemonic_text: &'a str) -> &'a str {
 }
 
 impl AppMenu {
+    pub fn register_app_event_listener<R: Runtime>(&self, app: &AppHandle<R>) {
+        if APP_EVENT_LISTENER_REGISTERED.swap(true, Ordering::AcqRel) {
+            debug_assert!(
+                false,
+                "AppMenu::register_app_event_listener must only be called once"
+            );
+            return;
+        }
+
+        let app_handle = app.clone();
+        app.listen_any(crate::app_event::APP_EVENT_NAME, move |event: Event| {
+            let Ok(app_event) = serde_json::from_str::<AppEvent>(event.payload()) else {
+                return;
+            };
+
+            let app_menu = app_handle.state::<AppMenu>();
+            app_menu.handle_app_event(&app_handle, &app_event);
+        });
+    }
+
     pub fn build<R: Runtime>(&self, app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         let file_menu = Submenu::with_items(
             app,
@@ -128,9 +155,15 @@ impl AppMenu {
     pub fn handle_event<R: Runtime>(&self, app: &AppHandle<R>, event: tauri::menu::MenuEvent) {
         match event.id().as_ref() {
             MENU_QUIT => app.exit(0),
-            MENU_THEME_SYSTEM => self.handle_theme_menu_event(app, ThemePreference::System),
-            MENU_THEME_LIGHT => self.handle_theme_menu_event(app, ThemePreference::Light),
-            MENU_THEME_DARK => self.handle_theme_menu_event(app, ThemePreference::Dark),
+            MENU_THEME_SYSTEM => {
+                let _ = settings::update_theme(app, ThemePreference::System);
+            }
+            MENU_THEME_LIGHT => {
+                let _ = settings::update_theme(app, ThemePreference::Light);
+            }
+            MENU_THEME_DARK => {
+                let _ = settings::update_theme(app, ThemePreference::Dark);
+            }
             MENU_NEW | MENU_OPEN | MENU_SAVE | MENU_SAVE_AS | MENU_PREFERENCES => {
                 let payload = MenuActionPayload {
                     id: event.id().as_ref().to_string(),
@@ -138,6 +171,12 @@ impl AppMenu {
                 let _ = app.emit(MENU_ACTION_EVENT, payload);
             }
             _ => {}
+        }
+    }
+
+    fn handle_app_event<R: Runtime>(&self, app: &AppHandle<R>, event: &AppEvent) {
+        if let AppEvent::ThemeChanged { theme } = event {
+            self.sync_theme_menu_items(app, theme);
         }
     }
 
@@ -149,16 +188,6 @@ impl AppMenu {
         self.sync_theme_menu_item(&menu, MENU_THEME_SYSTEM, matches!(theme, ThemePreference::System));
         self.sync_theme_menu_item(&menu, MENU_THEME_LIGHT, matches!(theme, ThemePreference::Light));
         self.sync_theme_menu_item(&menu, MENU_THEME_DARK, matches!(theme, ThemePreference::Dark));
-    }
-
-    fn handle_theme_menu_event<R: Runtime>(&self, app: &AppHandle<R>, theme: ThemePreference) {
-        self.sync_theme_menu_items(app, &theme);
-
-        if settings::update_theme(app, theme).is_err() {
-            if let Ok(settings) = settings::load_settings(app) {
-                self.sync_theme_menu_items(app, &settings.theme);
-            }
-        }
     }
 
     fn sync_theme_menu_item<R: Runtime>(&self, menu: &Menu<R>, id: &str, checked: bool) {

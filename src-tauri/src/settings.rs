@@ -1,15 +1,18 @@
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
+    error::Error,
+    fmt,
     fs,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
+
+use crate::app_event::{events_for_settings_change, AppEventBus};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const SETTINGS_VERSION: u32 = 1;
-pub const SETTINGS_CHANGED_EVENT: &str = "settings-changed";
 static SETTINGS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -32,13 +35,6 @@ pub struct EditorSettings {}
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
     pub theme: ThemePreference,
-    pub window: WindowSettings,
-    pub editor: EditorSettings,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default, rename_all = "camelCase")]
-pub struct SaveSettingsInput {
     pub window: WindowSettings,
     pub editor: EditorSettings,
 }
@@ -76,7 +72,7 @@ pub struct SettingsError {
 }
 
 impl SettingsError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
+    pub fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -102,6 +98,14 @@ impl Serialize for SettingsError {
         .serialize(serializer)
     }
 }
+
+impl fmt::Display for SettingsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl Error for SettingsError {}
 
 fn settings_file_path_for_dir(base_dir: &Path) -> PathBuf {
     base_dir.join(SETTINGS_FILE_NAME)
@@ -224,40 +228,19 @@ pub fn load_settings<R: Runtime>(app: &AppHandle<R>) -> Result<AppSettings, Sett
     read_settings_from_path(&path)
 }
 
-pub fn save_settings(
-    app: &AppHandle<impl Runtime>,
-    input: SaveSettingsInput,
-) -> Result<AppSettings, SettingsError> {
-    let _guard = settings_lock().lock().expect("settings mutex poisoned");
-    let path = resolve_settings_file_path(app)?;
-    let mut settings = read_settings_from_path(&path)?;
-    settings.window = input.window;
-    settings.editor = input.editor;
-    write_settings_to_path(&path, &settings)?;
-    app.emit(SETTINGS_CHANGED_EVENT, &settings).map_err(|error| {
-        SettingsError::new(
-            "write failed",
-            format!("settings were saved but event emission failed: {error}"),
-        )
-    })?;
-    Ok(settings)
-}
-
 pub fn update_theme(
     app: &AppHandle<impl Runtime>,
     theme: ThemePreference,
 ) -> Result<AppSettings, SettingsError> {
     let _guard = settings_lock().lock().expect("settings mutex poisoned");
     let path = resolve_settings_file_path(app)?;
-    let mut settings = read_settings_from_path(&path)?;
+    let previous = read_settings_from_path(&path)?;
+    let mut settings = previous.clone();
     settings.theme = theme;
     write_settings_to_path(&path, &settings)?;
-    app.emit(SETTINGS_CHANGED_EVENT, &settings).map_err(|error| {
-        SettingsError::new(
-            "write failed",
-            format!("settings were saved but event emission failed: {error}"),
-        )
-    })?;
+    let events = events_for_settings_change(&previous, &settings);
+    let event_bus = app.state::<AppEventBus>();
+    event_bus.publish_all(app, events)?;
     Ok(settings)
 }
 
@@ -277,13 +260,6 @@ mod tests {
         if path.exists() {
             fs::remove_dir_all(path).expect("failed to remove test directory");
         }
-    }
-
-    fn merge_save_settings(current: &AppSettings, input: SaveSettingsInput) -> AppSettings {
-        let mut settings = current.clone();
-        settings.window = input.window;
-        settings.editor = input.editor;
-        settings
     }
 
     #[test]
@@ -353,16 +329,4 @@ mod tests {
         cleanup_dir(&dir);
     }
 
-    #[test]
-    fn save_settings_input_does_not_replace_theme() {
-        let current = AppSettings {
-            theme: ThemePreference::Dark,
-            ..AppSettings::default()
-        };
-        let input = SaveSettingsInput::default();
-
-        let merged = merge_save_settings(&current, input);
-
-        assert_eq!(merged.theme, ThemePreference::Dark);
-    }
 }

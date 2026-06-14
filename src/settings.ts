@@ -13,12 +13,11 @@ export interface AppSettings {
   editor: EditorSettings;
 }
 
-export interface SaveSettingsInput {
-  window: WindowSettings;
-  editor: EditorSettings;
-}
+type AppEvent =
+  | { type: "themeChanged"; payload: { theme: ThemePreference } }
+  | { type: "localeChanged"; payload: { locale: string } };
 
-const SETTINGS_CHANGED_EVENT = "settings-changed";
+const APP_EVENT_NAME = "app-event";
 
 let cachedSettings: AppSettings | null = null;
 
@@ -44,12 +43,6 @@ export async function getSettings(): Promise<AppSettings> {
   return settings;
 }
 
-export async function saveSettings(settings: SaveSettingsInput): Promise<AppSettings> {
-  const saved = await invoke<AppSettings>("save_settings", { settings });
-  cachedSettings = saved;
-  return saved;
-}
-
 export async function setTheme(theme: ThemePreference): Promise<AppSettings> {
   const updated = await invoke<AppSettings>("update_theme", { theme });
   cachedSettings = updated;
@@ -67,8 +60,14 @@ export async function initializeSettings(): Promise<AppSettings> {
 }
 
 export async function watchSettingsChanges(): Promise<() => void> {
-  return listen<AppSettings>(SETTINGS_CHANGED_EVENT, (event) => {
-    cachedSettings = event.payload;
-    applyTheme(event.payload.theme);
+  return listen<AppEvent>(APP_EVENT_NAME, (event) => {
+    if (event.payload.type === "themeChanged") {
+      const settings = getCachedSettings();
+      cachedSettings = {
+        ...settings,
+        theme: event.payload.payload.theme,
+      };
+      applyTheme(event.payload.payload.theme);
+    }
   });
 }
