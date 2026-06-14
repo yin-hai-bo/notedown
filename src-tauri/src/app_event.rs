@@ -16,7 +16,11 @@ pub enum AppEvent {
 pub struct AppEventBus;
 
 impl AppEventBus {
-    pub fn publish<R: Runtime>(&self, app: &AppHandle<R>, event: AppEvent) -> Result<(), SettingsError> {
+    pub fn publish<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        event: AppEvent,
+    ) -> Result<(), SettingsError> {
         self.emit_app_events(app, &event)?;
         Ok(())
     }

@@ -63,7 +63,10 @@ fn read_document(path: PathBuf) -> Result<DocumentData, DocumentError> {
     let content = fs::read_to_string(&path).map_err(|error| {
         DocumentError::new(
             "read failed",
-            format!("failed to read document {} as UTF-8: {error}", path.display()),
+            format!(
+                "failed to read document {} as UTF-8: {error}",
+                path.display()
+            ),
         )
     })?;
 
@@ -78,7 +81,10 @@ fn write_document(path: PathBuf, content: &str) -> Result<DocumentData, Document
     fs::write(&path, content.as_bytes()).map_err(|error| {
         DocumentError::new(
             "write failed",
-            format!("failed to write document {} as UTF-8: {error}", path.display()),
+            format!(
+                "failed to write document {} as UTF-8: {error}",
+                path.display()
+            ),
         )
     })?;
 
@@ -143,7 +149,8 @@ mod tests {
     fn write_and_read_document_round_trips_utf8_content() {
         let path = unique_test_file("测试.md");
         let content = "# 标题\n\n正文";
-        fs::create_dir_all(path.parent().expect("expected parent")).expect("expected test dir setup");
+        fs::create_dir_all(path.parent().expect("expected parent"))
+            .expect("expected test dir setup");
 
         let saved = write_document(path.clone(), content).expect("expected write to succeed");
         let opened = read_document(path.clone()).expect("expected read to succeed");

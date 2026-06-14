@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
     error::Error,
-    fmt,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
@@ -115,9 +114,14 @@ fn settings_lock() -> &'static Mutex<()> {
     SETTINGS_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-pub fn resolve_settings_file_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, SettingsError> {
+pub fn resolve_settings_file_path<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<PathBuf, SettingsError> {
     let base_dir = app.path().app_local_data_dir().map_err(|error| {
-        SettingsError::new("path resolve failed", format!("failed to resolve app local data directory: {error}"))
+        SettingsError::new(
+            "path resolve failed",
+            format!("failed to resolve app local data directory: {error}"),
+        )
     })?;
 
     Ok(settings_file_path_for_dir(&base_dir))
@@ -128,7 +132,10 @@ fn ensure_parent_dir(path: &Path) -> Result<(), SettingsError> {
         Some(parent) => fs::create_dir_all(parent).map_err(|error| {
             SettingsError::new(
                 "create dir failed",
-                format!("failed to create settings directory {}: {error}", parent.display()),
+                format!(
+                    "failed to create settings directory {}: {error}",
+                    parent.display()
+                ),
             )
         }),
         None => Err(SettingsError::new(
@@ -196,14 +203,20 @@ fn write_settings_to_path(path: &Path, settings: &AppSettings) -> Result<(), Set
     let payload = serde_json::to_vec_pretty(&file).map_err(|error| {
         SettingsError::new(
             "write failed",
-            format!("failed to serialize settings for {}: {error}", path.display()),
+            format!(
+                "failed to serialize settings for {}: {error}",
+                path.display()
+            ),
         )
     })?;
 
     fs::write(&temp_path, payload).map_err(|error| {
         SettingsError::new(
             "write failed",
-            format!("failed to write temporary settings file {}: {error}", temp_path.display()),
+            format!(
+                "failed to write temporary settings file {}: {error}",
+                temp_path.display()
+            ),
         )
     })?;
 
@@ -293,7 +306,8 @@ mod tests {
         let dir = unique_test_dir();
         let path = settings_file_path_for_dir(&dir);
         ensure_parent_dir(&path).expect("expected parent dir creation");
-        fs::write(&path, b"{ this is not valid json").expect("expected invalid test file to be written");
+        fs::write(&path, b"{ this is not valid json")
+            .expect("expected invalid test file to be written");
 
         let error = read_settings_from_path(&path).expect_err("expected parse failure");
         let contents = fs::read_to_string(&path).expect("expected original file to remain");
@@ -325,8 +339,10 @@ mod tests {
             serde_json::from_str(&contents).expect("expected valid json in settings file");
 
         assert_eq!(parsed["version"], SETTINGS_VERSION);
-        assert!(parsed.get("settings").is_some(), "settings object should be present");
+        assert!(
+            parsed.get("settings").is_some(),
+            "settings object should be present"
+        );
         cleanup_dir(&dir);
     }
-
 }

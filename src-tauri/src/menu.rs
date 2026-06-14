@@ -185,9 +185,21 @@ impl AppMenu {
             return;
         };
 
-        self.sync_theme_menu_item(&menu, MENU_THEME_SYSTEM, matches!(theme, ThemePreference::System));
-        self.sync_theme_menu_item(&menu, MENU_THEME_LIGHT, matches!(theme, ThemePreference::Light));
-        self.sync_theme_menu_item(&menu, MENU_THEME_DARK, matches!(theme, ThemePreference::Dark));
+        self.sync_theme_menu_item(
+            &menu,
+            MENU_THEME_SYSTEM,
+            matches!(theme, ThemePreference::System),
+        );
+        self.sync_theme_menu_item(
+            &menu,
+            MENU_THEME_LIGHT,
+            matches!(theme, ThemePreference::Light),
+        );
+        self.sync_theme_menu_item(
+            &menu,
+            MENU_THEME_DARK,
+            matches!(theme, ThemePreference::Dark),
+        );
     }
 
     fn sync_theme_menu_item<R: Runtime>(&self, menu: &Menu<R>, id: &str, checked: bool) {
@@ -202,7 +214,11 @@ impl AppMenu {
         let _ = check_item.set_checked(checked);
     }
 
-    fn find_menu_item_in_menu<R: Runtime>(&self, menu: &Menu<R>, id: &str) -> Option<MenuItemKind<R>> {
+    fn find_menu_item_in_menu<R: Runtime>(
+        &self,
+        menu: &Menu<R>,
+        id: &str,
+    ) -> Option<MenuItemKind<R>> {
         for item in menu.items().ok()? {
             if item.id() == &id {
                 return Some(item);
