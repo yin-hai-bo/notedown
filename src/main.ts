@@ -1,10 +1,12 @@
 import { createApp } from "vue";
 import App from "./App.vue";
+import { watchMenuActions } from "./documents";
 import { initializeSettings, watchSettingsChanges } from "./settings";
 
 async function bootstrap(): Promise<void> {
   await initializeSettings();
   await watchSettingsChanges();
+  await watchMenuActions();
   createApp(App).mount("#app");
 }
 

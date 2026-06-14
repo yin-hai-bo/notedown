@@ -1,8 +1,10 @@
 mod app_event;
+mod document;
 mod menu;
 mod settings;
 
 use app_event::{AppEvent, AppEventBus};
+use document::{open_document, save_document, save_document_as};
 use menu::AppMenu;
 use settings::{AppSettings, SettingsError, ThemePreference};
 use tauri::Manager;
@@ -58,7 +60,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_settings,
             update_theme,
-            settings_file_path
+            settings_file_path,
+            open_document,
+            save_document,
+            save_document_as
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
